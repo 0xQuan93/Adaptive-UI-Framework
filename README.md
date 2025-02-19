@@ -63,5 +63,5 @@ This project is licensed under the **MIT License**.
 
 ## Contributors
 
-- **0xQuan** - [Your GitHub Profile](https://github.com/0xQuan93)
+- **0xQuan** - [Profile](https://github.com/0xQuan93)
 
