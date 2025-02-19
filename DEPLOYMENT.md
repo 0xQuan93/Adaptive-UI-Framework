@@ -69,7 +69,7 @@ ssh -i "your-key.pem" ubuntu@your-ec2-ip
 3. **Install Python & Clone the Repository**:
 ```bash
 sudo apt update && sudo apt install -y python3 python3-pip git
-git clone https://github.com/YOUR-USERNAME/adaptive-ui-framework.git
+git clone https://github.com/0xQuan93/adaptive-ui-framework.git
 cd adaptive-ui-framework
 ```
 4. **Install Dependencies & Run**:
@@ -146,6 +146,6 @@ tail -f logs/system.log
 
 ## **Contributors**
 
-- **Your Name** - [Your GitHub Profile](https://github.com/YOUR-USERNAME)
+- **0xQuan93** - [GitHub Profile](https://github.com/0xQuan93)
 
 Happy coding! 🚀
