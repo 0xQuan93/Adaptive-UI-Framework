@@ -16,7 +16,7 @@ This repository contains the **Adaptive User Interface Framework** that integrat
 Clone the repository:
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/adaptive-ui-framework.git
+git clone https://github.com/0xQuan93/adaptive-ui-framework.git
 cd adaptive-ui-framework
 ```
 
@@ -63,5 +63,5 @@ This project is licensed under the **MIT License**.
 
 ## Contributors
 
-- **Your Name** - [Your GitHub Profile](https://github.com/YOUR-USERNAME)
+- **0xQuan** - [Your GitHub Profile](https://github.com/0xQuan93)
 
