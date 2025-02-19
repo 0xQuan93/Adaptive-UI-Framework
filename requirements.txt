@@ -1,0 +1,13 @@
+# Required dependencies for Adaptive UI Framework
+
+# NLP & Sentiment Analysis
+vaderSentiment
+
+# AI Language Model Integration
+transformers
+
+# System & Environment Detection
+platformdirs
+
+# JSON Data Handling
+json5
