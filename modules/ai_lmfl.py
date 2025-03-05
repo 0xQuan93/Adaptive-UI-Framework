@@ -159,6 +159,25 @@ try:
                     
                     tokenizer = AutoTokenizer.from_pretrained(model_name)
                     
+                    # Fix for models where pad_token is not defined or same as eos_token
+                    if tokenizer.pad_token is None or tokenizer.pad_token == tokenizer.eos_token:
+                        print("[INFO] Setting custom pad token for the tokenizer")
+                        # Use a different token as pad token (common approach)
+                        if "phi" in model_name.lower():
+                            # Phi models often use this special token
+                            tokenizer.pad_token = tokenizer.eos_token
+                            # Configure model to work with this arrangement
+                            model.config.pad_token_id = model.config.eos_token_id
+                            print("[INFO] Using EOS token as PAD token for Phi model with special handling")
+                        else:
+                            # For other models, use a general approach
+                            tokenizer.pad_token = "[PAD]"
+                            # Add the new token if it doesn't exist
+                            if tokenizer.pad_token_id is None:
+                                tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+                                # Resize token embeddings if we added a new token
+                                model.resize_token_embeddings(len(tokenizer))
+                    
                     class CustomSmallModelPipeline:
                         def __init__(self, model, tokenizer, model_name):
                             self.model = model
@@ -174,23 +193,38 @@ try:
                                     if "[INST]" not in prompt:
                                         prompt = f"<s>[INST] {prompt} [/INST]"
                             
-                            inputs = self.tokenizer(prompt, return_tensors="pt")
+                            # Properly handle padding for generation
+                            inputs = self.tokenizer(prompt, return_tensors="pt", padding=True)
                             
                             # Move to GPU if available
                             if CUDA_AVAILABLE:
                                 inputs = {k: v.to("cuda") for k, v in inputs.items()}
                                 
-                            # Generate output
+                            # Generate output with proper padding configuration
                             with torch.no_grad():
-                                outputs = self.model.generate(
-                                    inputs.input_ids,
-                                    max_new_tokens=max_length,
-                                    do_sample=do_sample,
-                                    temperature=temperature,
-                                    top_p=top_p,
-                                    pad_token_id=self.tokenizer.eos_token_id,
-                                    **{k: v for k, v in kwargs.items() if k not in ['return_full_text']}
-                                )
+                                try:
+                                    outputs = self.model.generate(
+                                        inputs.input_ids,
+                                        attention_mask=inputs.attention_mask,
+                                        max_new_tokens=max_length,
+                                        do_sample=do_sample,
+                                        temperature=temperature,
+                                        top_p=top_p,
+                                        pad_token_id=self.tokenizer.pad_token_id,
+                                        **{k: v for k, v in kwargs.items() if k not in ['return_full_text']}
+                                    )
+                                except Exception as e:
+                                    print(f"[WARNING] Error in generation with attention mask: {e}")
+                                    # Fall back to generation without attention mask if needed
+                                    outputs = self.model.generate(
+                                        inputs.input_ids,
+                                        max_new_tokens=max_length,
+                                        do_sample=do_sample,
+                                        temperature=temperature,
+                                        top_p=top_p,
+                                        pad_token_id=self.tokenizer.pad_token_id,
+                                        **{k: v for k, v in kwargs.items() if k not in ['return_full_text']}
+                                    )
                             
                             # Decode the output
                             generated_text = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -279,6 +313,17 @@ User context: {context_summary}
 
 {user_input} [/INST]
 """
+                elif "phi" in model_name.lower():
+                    # Phi-specific prompting
+                    ai_prompt = f"""<|assistant|>
+I am an AI assistant for the Adaptive UI Framework.
+
+Context Information: {context_summary}
+
+User Query: {user_input}
+
+Response:
+"""
                 else:
                     # Default format for other small models
                     ai_prompt = f"""Context: {context_summary}
@@ -311,6 +356,17 @@ Answer:"""
             if is_small_model:
                 # For small models, the response may already be clean
                 response = generated_text.strip()
+                if "phi" in model_name.lower():
+                    # Clean up Phi response formats
+                    if "Response:" in response:
+                        response = response.split("Response:", 1)[1].strip()
+                    # Also clean up any special tokens that might appear
+                    if "<|AI|>" in response:
+                        response = response.split("<|AI|>", 1)[1].strip()
+                    # Remove any other potential Phi-specific markers
+                    for marker in ["<|assistant|>", "<|user|>"]:
+                        if marker in response:
+                            response = response.replace(marker, "").strip()
             else:
                 # Clean the response for other models, removing the question part if it exists
                 if "Answer:" in generated_text:
