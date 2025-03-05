@@ -1,7 +1,1 @@
-{
-    "dark_mode": false,
-    "high_contrast_mode": false,
-    "default_font_size": "Medium",
-    "ai_response_max_length": 50,
-    "allow_feedback_learning": true
-}
+{"ai_settings": {"ai_response_max_length": 500, "ai_model": "microsoft/phi-2"}}

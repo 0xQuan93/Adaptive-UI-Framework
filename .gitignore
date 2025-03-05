@@ -1,0 +1,59 @@
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Model files and cache directories (to avoid large files)
+.cache/
+.transformers_cache/
+*.bin
+*.h5
+*.pt
+*.pth
+*.ot
+*.safetensors
+models/
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+.env
+
+# Logs
+logs/
+*.log
+
+# Local config files (which may contain sensitive info)
+config.local.json
+*.env
+secrets.json
+
+# Other
+.ipynb_checkpoints/
+data/user_feedback.json
+
+# Keep specific files that might be excluded by the rules above
+!requirements.txt
+!.gitignore
+!README.md
+!LICENSE 
