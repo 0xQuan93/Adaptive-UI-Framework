@@ -2,6 +2,15 @@
 import json
 import os
 import random
+import sys
+import traceback
+import time
+
+# Debug mode flag
+DEBUG_MODE = os.environ.get('AI_DEBUG', 'false').lower() == 'true'
+
+# Global AI pipeline
+ai_pipeline = None
 
 # Try to import transformers and necessary libraries, with fallback to mock implementation
 try:
@@ -19,25 +28,20 @@ try:
         
         # Try to import quantization libraries for CPUs
         try:
-            import bitsandbytes as bnb
-            from accelerate import init_empty_weights, infer_auto_device_map
-            QUANTIZATION_AVAILABLE = True
+            import bitsandbytes
+            import accelerate
             print("[INFO] Quantization libraries available (bitsandbytes, accelerate)")
         except ImportError:
-            QUANTIZATION_AVAILABLE = False
-            print("[WARNING] Quantization libraries not available, will use full precision")
+            print("[WARNING] Quantization libraries not available (install bitsandbytes, accelerate for better CPU performance)")
         
-        REAL_TRANSFORMERS_AVAILABLE = True
-        print("[INFO] Successfully imported transformers library")
-    except (ImportError, OSError) as e:
-        # Handle both import errors and DLL loading errors
-        REAL_TRANSFORMERS_AVAILABLE = False
-        print(f"[WARNING] Transformers library not available: {e}")
-        print("[WARNING] Using enhanced mock implementation")
+        HAS_REQUIRED_PACKAGES = True
+    except ImportError as e:
+        print(f"[WARNING] Unable to import required packages: {e}")
+        HAS_REQUIRED_PACKAGES = False
+        
 except Exception as e:
-    REAL_TRANSFORMERS_AVAILABLE = False
-    print(f"[WARNING] Unexpected error loading transformers: {e}")
-    print("[WARNING] Using enhanced mock implementation")
+    print(f"[ERROR] Unexpected error when importing dependencies: {e}")
+    HAS_REQUIRED_PACKAGES = False
 
 # Enhanced mock implementation for the transformers pipeline
 class EnhancedMockPipeline:
@@ -131,7 +135,7 @@ config = load_config()
 try:
     model_name = config.get("ai_settings", {}).get("ai_model", "gpt2")
     
-    if REAL_TRANSFORMERS_AVAILABLE:
+    if HAS_REQUIRED_PACKAGES:
         print(f"[INFO] Initializing real transformers pipeline with model: {model_name}")
         try:
             # Check if using a small language model
@@ -279,119 +283,98 @@ except Exception as e:
     is_small_model = False
 
 def generate_adaptive_response(user_input, context_data):
-    '''
-    Uses an AI-Language Model to generate adaptive responses.
-    :param user_input: User query.
-    :param context_data: UI adaptation recommendations.
-    :return: AI-generated response.
-    '''
-    if ai_model is None:
-        # Fallback if model fails to load
-        return f"I understand your question about '{user_input}'. Currently using adaptive UI with {context_data['Theme']} theme."
+    """
+    Generate an AI response that adapts to the user input and context.
+    
+    Args:
+        user_input (str): The user's input text
+        context_data (dict): Context information about the user's environment
         
+    Returns:
+        str: The generated response
+    """
+    start_time = time.time()
+    
+    if DEBUG_MODE:
+        print(f"[DEBUG] generate_adaptive_response called with input: {user_input}")
+        print(f"[DEBUG] Context data: {json.dumps(context_data)}")
+    
     try:
-        # Get max response length from config
-        max_length = config.get("ai_settings", {}).get("ai_response_max_length", 50)
+        # Load configuration for AI settings
+        config = load_config()
         
-        # Prepare context for better response
-        context_summary = (f"User Context: {context_data.get('Layout', 'Standard Layout')}, "
-                          f"Theme: {context_data.get('Theme', 'Standard Theme')}, "
-                          f"Device: {context_data.get('Touch Optimization', 'Unknown Device')}")
-        
-        # Different approach for real transformers vs mock
-        if not is_mock:
-            # For real transformers, create a more specific prompt
-            if is_small_model:
-                # Special prompting for small language models (Llama, Phi, etc.)
-                if "llama" in model_name.lower():
-                    # Llama-specific prompting
-                    ai_prompt = f"""<s>[INST] <<SYS>>
-You are an AI assistant for the Adaptive UI Framework. Your responses should be helpful, accurate and tailored to the user's context.
-<</SYS>>
-
-User context: {context_summary}
-
-{user_input} [/INST]
-"""
-                elif "phi" in model_name.lower():
-                    # Phi-specific prompting
-                    ai_prompt = f"""<|assistant|>
-I am an AI assistant for the Adaptive UI Framework.
-
-Context Information: {context_summary}
-
-User Query: {user_input}
-
-Response:
-"""
-                else:
-                    # Default format for other small models
-                    ai_prompt = f"""Context: {context_summary}
-Question: {user_input}
-Answer:"""
-            else:
-                # For GPT-2 and other standard models
-                if "adaptive ui" in user_input.lower() or "ui" in user_input.lower():
-                    ai_prompt = f"Question: {user_input}\nAnswer: Adaptive UI is a user interface that dynamically adjusts based on user preferences, context, and behavior."
-                elif "hello" in user_input.lower() or "hi" in user_input.lower():
-                    ai_prompt = f"Question: {user_input}\nAnswer: Hello! I'm your AI assistant for the adaptive UI framework. How can I help you today?"
-                else:
-                    ai_prompt = f"Question: {user_input}\nAnswer: "
-                
-            # Generate with real transformers
-            print(f"[INFO] Using real transformers with prompt: {ai_prompt[:50]}...")
-            response_obj = ai_model(
-                ai_prompt, 
-                max_length=max_length,
-                do_sample=True,
-                temperature=0.7,
-                top_p=0.9,
-                return_full_text=False
+        # Check if we're in mock mode (either by configuration or lack of dependencies)
+        if not HAS_REQUIRED_PACKAGES or config.get("use_mock_ai", False):
+            if DEBUG_MODE:
+                print("[DEBUG] Using mock AI implementation")
+            # Use the mock implementation
+            mock_pipeline = EnhancedMockPipeline(
+                task="text-generation",
+                model="mock-model"
             )
             
-            # Extract response
-            generated_text = response_obj[0]['generated_text']
-            
-            # Clean the response based on model type
-            if is_small_model:
-                # For small models, the response may already be clean
-                response = generated_text.strip()
-                if "phi" in model_name.lower():
-                    # Clean up Phi response formats
-                    if "Response:" in response:
-                        response = response.split("Response:", 1)[1].strip()
-                    # Also clean up any special tokens that might appear
-                    if "<|AI|>" in response:
-                        response = response.split("<|AI|>", 1)[1].strip()
-                    # Remove any other potential Phi-specific markers
-                    for marker in ["<|assistant|>", "<|user|>"]:
-                        if marker in response:
-                            response = response.replace(marker, "").strip()
-            else:
-                # Clean the response for other models, removing the question part if it exists
-                if "Answer:" in generated_text:
-                    response = generated_text.split("Answer:", 1)[1].strip()
-                else:
-                    response = generated_text.strip()
+            # Generate a mock response based on user input and context
+            prompt = format_prompt_with_context(user_input, context_data)
+            if DEBUG_MODE:
+                print(f"[DEBUG] Generated prompt: {prompt}")
                 
-            # Add context-aware personalization if not already in the response
-            if "Theme: Dark Mode" in context_summary and "dark mode" not in response.lower():
-                response += " I notice you're using our dark mode interface."
-            elif "Theme: Light Mode" in context_summary and "light mode" not in response.lower():
-                response += " I see you're using our light mode interface."
+            response = mock_pipeline(
+                prompt,
+                max_length=100,
+                do_sample=True
+            )
             
-            if ("Device: Enabled" in context_summary or "Mobile" in context_summary) and "mobile" not in response.lower():
-                response += " Our touch-optimized interface should work well on your mobile device."
+            if DEBUG_MODE:
+                print(f"[DEBUG] Mock response generated in {time.time() - start_time:.2f} seconds")
+            
+            return clean_response(response[0]["generated_text"])
+        
+        # Use the actual AI model
+        global ai_pipeline
+        if ai_pipeline is None:
+            if DEBUG_MODE:
+                print("[DEBUG] Initializing AI pipeline")
+            ai_pipeline = initialize_ai_pipeline(config)
+        
+        # Get the maximum response length from config
+        max_length = config.get("ai_settings", {}).get("ai_response_max_length", 500)
+        
+        # Format the prompt with context information
+        prompt = format_prompt_with_context(user_input, context_data)
+        if DEBUG_MODE:
+            print(f"[DEBUG] Generated prompt: {prompt}")
+            print(f"[DEBUG] Max response length: {max_length}")
+        
+        # Generate response using the AI pipeline
+        response = ai_pipeline(
+            prompt,
+            max_length=max_length,
+            do_sample=True,
+            temperature=0.7,
+            top_p=0.9
+        )
+        
+        # Extract and clean the generated text
+        if isinstance(response, list) and len(response) > 0:
+            generated_text = response[0]["generated_text"]
         else:
-            # Use the mock implementation
-            ai_prompt = f"{context_summary}. Respond to: {user_input}"
-            response = ai_model(ai_prompt, max_length=max_length, do_sample=True)[0]['generated_text']
+            generated_text = str(response)
             
-        return response
+        cleaned_response = clean_response(generated_text)
+        
+        if DEBUG_MODE:
+            print(f"[DEBUG] AI response generated in {time.time() - start_time:.2f} seconds")
+            print(f"[DEBUG] Raw response: {generated_text[:100]}...")
+            print(f"[DEBUG] Cleaned response: {cleaned_response[:100]}...")
+            
+        return cleaned_response
+        
     except Exception as e:
-        # Fallback for any errors
-        print(f"[ERROR] Error generating AI response: {e}")
-        return f"I understand your question about '{user_input}', but I'm having trouble generating a response right now."
+        print(f"[ERROR] Error generating response: {e}")
+        print(f"[ERROR] Traceback: {traceback.format_exc()}")
+        
+        # Return a fallback response in case of error
+        return f"I apologize, but I encountered an error processing your request. Please try again. (Error: {str(e)[:100]})"
 
 def get_model_info():
     '''
@@ -417,3 +400,102 @@ def get_model_info():
         "is_small_model": is_small_model if not is_mock else False,
         "using_gpu": CUDA_AVAILABLE and not is_mock
     }
+
+def format_prompt_with_context(user_input, context_data):
+    """
+    Format the prompt with context information for better AI responses.
+    
+    Args:
+        user_input (str): The user's input text
+        context_data (dict): Context information about the user's environment
+        
+    Returns:
+        str: Formatted prompt with context
+    """
+    # Create a summary of the context
+    context_summary = (f"User Context: {context_data.get('Layout', 'Standard Layout')}, "
+                      f"Theme: {context_data.get('Theme', 'Standard Theme')}, "
+                      f"Touch Optimization: {context_data.get('Touch Optimization', 'Unknown Device')}")
+    
+    # Get the model name from config
+    config = load_config()
+    model_name = config.get("ai_settings", {}).get("ai_model", "gpt2").lower()
+    
+    # Adjust prompt format based on model family
+    if "llama" in model_name:
+        # Llama-specific prompting
+        prompt = f"""<s>[INST] <<SYS>>
+You are an AI assistant for the Adaptive UI Framework. Your responses should be helpful, accurate and tailored to the user's context.
+<</SYS>>
+
+User context: {context_summary}
+
+{user_input} [/INST]
+"""
+    elif "phi" in model_name:
+        # Phi-specific prompting
+        prompt = f"""Instruction: You are an AI assistant for the Adaptive UI Framework. Provide a helpful, accurate, and concise response to the user's query. Ensure your response is relevant to the user's context.
+
+Context Information: {context_summary}
+
+User Query: {user_input}
+
+Response:"""
+    else:
+        # Default format for other models
+        prompt = f"""Context: {context_summary}
+Question: {user_input}
+Answer:"""
+    
+    return prompt
+
+def clean_response(generated_text):
+    """
+    Clean the generated text to get a proper response.
+    
+    Args:
+        generated_text (str): The raw generated text from the model
+        
+    Returns:
+        str: Cleaned response
+    """
+    if not generated_text:
+        return "I apologize, but I couldn't generate a response."
+    
+    response = generated_text.strip()
+    
+    # Check for various pattern markers and clean them
+    if "Response:" in response:
+        response = response.split("Response:", 1)[1].strip()
+    elif "Answer:" in response:
+        response = response.split("Answer:", 1)[1].strip()
+    
+    # Clean up special tokens that might appear
+    special_tokens = [
+        "<|AI|>", "<|assistant|>", "<|user|>", "<|endofgeneration|>", 
+        "<|endoftext|>", "<|beginofstoryusingtemplates|>", "<s>", "</s>"
+    ]
+    for token in special_tokens:
+        if token in response:
+            response = response.replace(token, "").strip()
+    
+    # Remove any chat pattern if it exists
+    chat_patterns = [
+        "<|User|>", "<|Assistant|>", "|User|", "|Assistant|",
+        "User:", "Assistant:"
+    ]
+    for pattern in chat_patterns:
+        if pattern in response:
+            # Try to keep just the assistant's response
+            parts = response.split(pattern)
+            if len(parts) > 1:
+                # Try to use the most relevant part (usually after Assistant)
+                for i, part in enumerate(parts):
+                    if i > 0 and ("Assistant" in parts[i-1] or "AI" in parts[i-1]):
+                        response = part.strip()
+                        break
+                else:
+                    # If no clear assistant part, join all parts
+                    response = " ".join([p.strip() for p in parts if p.strip()])
+    
+    return response
